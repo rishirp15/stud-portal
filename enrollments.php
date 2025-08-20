@@ -1,22 +1,18 @@
 <?php
 require_once 'lib.php';
-$filename = 'enrollments.json';
-$enrollments = load_json($filename);
+require_once 'db.php'; // Include the new database connection
 
+// --- Handle POST request to add an enrollment ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $student = trim($_POST['student'] ?? '');
     $course  = trim($_POST['course'] ?? '');
-    $email   = trim($_POST['email'] ?? '');
+    $email   = trim($_POST['email'] ?? '') ?: null; // Set to null if empty
 
     if ($student && $course) {
-        $enrollments[] = [
-            'id' => uniqid('enr_', true),
-            'student' => $student,
-            'course' => $course,
-            'email' => $email,
-            'created_at' => date('c')
-        ];
-        save_json($filename, $enrollments);
+        // Use a prepared statement to prevent SQL injection
+        $stmt = $pdo->prepare("INSERT INTO enrollments (student, course, email) VALUES (?, ?, ?)");
+        $stmt->execute([$student, $course, $email]);
+
         header('Location: enrollments.php?ok=1');
         exit;
     } else {
@@ -24,13 +20,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// --- Handle GET request to delete an enrollment ---
 if (isset($_GET['del'])) {
     $id = $_GET['del'];
-    $enrollments = array_values(array_filter($enrollments, fn($e) => $e['id'] !== $id));
-    save_json($filename, $enrollments);
+    $stmt = $pdo->prepare("DELETE FROM enrollments WHERE id = ?");
+    $stmt->execute([$id]);
+
     header('Location: enrollments.php?deleted=1');
     exit;
 }
+
+// --- Fetch all enrollments from the database ---
+$stmt = $pdo->query("SELECT id, student, course, email, created_at FROM enrollments ORDER BY created_at DESC");
+$enrollments = $stmt->fetchAll();
 
 header_html('Enrollments');
 ?>
@@ -58,7 +60,6 @@ header_html('Enrollments');
 
 <section class="card">
   <h2>Current Enrollments</h2>
-  <p class="note">Tip: Click the bin icon to remove a row (demo only).</p>
   <table>
     <thead><tr><th>Student</th><th>Course</th><th>Email</th><th>Created</th><th>Action</th></tr></thead>
     <tbody>

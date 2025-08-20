@@ -1,8 +1,8 @@
 <?php
 require_once 'lib.php';
-$filename = 'attendance.json';
-$attendance = load_json($filename);
+require_once 'db.php'; // Include the new database connection
 
+// --- Handle POST request to add attendance ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $date    = trim($_POST['date'] ?? '');
     $student = trim($_POST['student'] ?? '');
@@ -10,15 +10,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $status  = trim($_POST['status'] ?? 'Present');
 
     if ($date && $student && $course) {
-        $attendance[] = [
-            'id' => uniqid('att_', true),
-            'date' => $date,
-            'student' => $student,
-            'course' => $course,
-            'status' => $status,
-            'created_at' => date('c')
-        ];
-        save_json($filename, $attendance);
+        $stmt = $pdo->prepare("INSERT INTO attendance (attendance_date, student, course, status) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$date, $student, $course, $status]);
+        
         header('Location: attendance.php?ok=1');
         exit;
     } else {
@@ -26,13 +20,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// --- Handle GET request to delete attendance ---
 if (isset($_GET['del'])) {
     $id = $_GET['del'];
-    $attendance = array_values(array_filter($attendance, fn($r) => $r['id'] !== $id));
-    save_json($filename, $attendance);
+    $stmt = $pdo->prepare("DELETE FROM attendance WHERE id = ?");
+    $stmt->execute([$id]);
+
     header('Location: attendance.php?deleted=1');
     exit;
 }
+
+// --- Fetch all attendance records from the database ---
+$stmt = $pdo->query("SELECT id, attendance_date, student, course, status FROM attendance ORDER BY attendance_date DESC, student ASC");
+$attendance = $stmt->fetchAll();
 
 header_html('Attendance');
 ?>
@@ -73,7 +73,7 @@ header_html('Attendance');
     <tbody>
       <?php foreach ($attendance as $r): ?>
         <tr>
-          <td><?= e($r['date']) ?></td>
+          <td><?= e($r['attendance_date']) ?></td>
           <td><?= e($r['student']) ?></td>
           <td><span class="badge"><?= e($r['course']) ?></span></td>
           <td><?= e($r['status']) ?></td>

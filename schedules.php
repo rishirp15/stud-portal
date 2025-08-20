@@ -1,24 +1,18 @@
 <?php
 require_once 'lib.php';
-$filename = 'schedules.json';
-$schedules = load_json($filename);
+require_once 'db.php'; // Include the new database connection
 
+// --- Handle POST request to add a schedule ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $course = trim($_POST['course'] ?? '');
     $day    = trim($_POST['day'] ?? '');
     $time   = trim($_POST['time'] ?? '');
-    $room   = trim($_POST['room'] ?? '');
+    $room   = trim($_POST['room'] ?? '') ?: null; // Set to null if empty
 
     if ($course && $day && $time) {
-        $schedules[] = [
-            'id' => uniqid('sch_', true),
-            'course' => $course,
-            'day' => $day,
-            'time' => $time,
-            'room' => $room,
-            'created_at' => date('c')
-        ];
-        save_json($filename, $schedules);
+        $stmt = $pdo->prepare("INSERT INTO schedules (course, day_of_week, time_slot, room) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$course, $day, $time, $room]);
+
         header('Location: schedules.php?ok=1');
         exit;
     } else {
@@ -26,13 +20,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// --- Handle GET request to delete a schedule ---
 if (isset($_GET['del'])) {
     $id = $_GET['del'];
-    $schedules = array_values(array_filter($schedules, fn($s) => $s['id'] !== $id));
-    save_json($filename, $schedules);
+    $stmt = $pdo->prepare("DELETE FROM schedules WHERE id = ?");
+    $stmt->execute([$id]);
+
     header('Location: schedules.php?deleted=1');
     exit;
 }
+
+// --- Fetch all schedules from the database ---
+$stmt = $pdo->query("SELECT id, course, day_of_week, time_slot, room FROM schedules ORDER BY course, day_of_week");
+$schedules = $stmt->fetchAll();
 
 header_html('Schedules');
 ?>
@@ -73,8 +73,8 @@ header_html('Schedules');
       <?php foreach ($schedules as $s): ?>
         <tr>
           <td><span class="badge"><?= e($s['course']) ?></span></td>
-          <td><?= e($s['day']) ?></td>
-          <td><?= e($s['time']) ?></td>
+          <td><?= e($s['day_of_week']) ?></td>
+          <td><?= e($s['time_slot']) ?></td>
           <td><?= e($s['room']) ?></td>
           <td><a href="schedules.php?del=<?= e($s['id']) ?>" onclick="return confirm('Delete this slot?')">🗑️</a></td>
         </tr>
